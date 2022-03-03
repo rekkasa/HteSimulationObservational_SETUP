@@ -5,6 +5,6 @@ data/processed/leacySettings.rds : code/LeacySimulationSettings.R
 	$<
 
 
-submission/literature_review.html : submission/literature_review.rmd
-	R -e 'rmarkdown::render("submission/literature_review.rmd", output_format = "all")'
+docs/literature_review.html : submission/literature_review.rmd
+	R -e 'rmarkdown::render("submission/literature_review.rmd", output_format = "all", output_dir = "docs")'
  
