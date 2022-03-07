@@ -15,6 +15,9 @@
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 1) stop("Requires scenario id")
 
+source("code/helpers/")
+
+
 library(tidyverse)
 library(SmoothHte)
 library(SimulateHte)
@@ -83,11 +86,69 @@ treatmentEffectSettings <- SimulateHte::createTreatmentEffectSettings(
   )
 )
 
+psSettings <- CohortMethod::createMatchOnPsArgs(maxRatio = 4)
 
-simulatedData <- runDataGeneration(
-  databaseSettings = settings$databaseSettings,
-  baselineRiskSettings = settings$baselineRiskSettings,
-  propensitySettings = settings$propensitySettings,
+predictionSettings <- createPredictionSettings(
+  args = list(
+    formula = "outcome ~ x1 + x2 + x3 + x4 + x8 + x9 + x10 + treatment",
+    family  = "binomial",
+  ),
+  fun = "glm",
+  .before = CohortMethod::matchOnPs,
+  .beforeSettings = psSettings
+)
+
+# -------------------------------------------------
+# TODO:
+#   - Rewrite truncation function to calculate
+#     weights, setting w=0 for truncated patients
+#   - Figure out .afterSettings
+# -------------------------------------------------
+propensityScoreSettings <- createPredictionSettings(
+  args = list(
+    formula = "treatment ~ x1 + x2 + x3 + x4 + x5 + x6 + x7",
+    family  = "binomial"
+  ),
+  fun = "glm"
+  .after  = strurmerTruncate,
+  .afterSettings
+)
+
+simulationSettings <- list(
+  databaseSettings        = settings$databaseSettings,
+  baselineRiskSettings    = settings$baselineRiskSettings,
+  propensitySettings      = settings$propensitySettings,
   treatmentEffectSettings = treatmentEffectSettings
 )
 
+analysisSettings <- SimulationEvaluationHte::createAnalysisSettings(
+  threads        = 46,
+  seed           = 19910930,
+  replications   = 5,
+  validationSize = 5e5,
+  analysisId     = paste(
+    "scenario",
+    idSettings$scenario,
+    sep = "_"
+  ),
+  description   = "description",
+  saveDirectory = "data/raw"
+)
+
+smoothSettings <- list(
+  constant = createHteSettings(
+    label = "constant_treatment_effect",
+    settings = createModelBasedSettings(
+      type  = "treatment",
+      model = "logistic"
+    )
+  ),
+  constantLp = createHteSettings(
+    label = "linear_predictor",
+    settings = createModelBasedSettings()
+  ),
+  rcs3 = createHteSettings(
+    settings = SmoothHte::createRcsSettings(),
+    label = "rcs_3_knots"
+  )
+)
