@@ -15,7 +15,7 @@
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 1) stop("Requires scenario id")
 
-source("code/helpers/")
+source("code/helpers/Weights.R")
 
 
 library(tidyverse)
@@ -50,6 +50,7 @@ idSettings <- analysisIds %>%
 #   - propensitySettings
 # -----------------------------------------------------
 settings <- readRDS("data/processed/leacySettings.rds")
+settings$databaseSettings$numberOfObservations <- idSettings$sampleSize
 
 if (idSettings$base != "absent") {
   harm <- case_when(
@@ -91,7 +92,7 @@ psSettings <- CohortMethod::createMatchOnPsArgs(maxRatio = 4)
 predictionSettings <- createPredictionSettings(
   args = list(
     formula = "outcome ~ x1 + x2 + x3 + x4 + x8 + x9 + x10 + treatment",
-    family  = "binomial",
+    family  = "binomial"
   ),
   fun = "glm",
   .before = CohortMethod::matchOnPs,
@@ -109,9 +110,9 @@ propensityScoreSettings <- createPredictionSettings(
     formula = "treatment ~ x1 + x2 + x3 + x4 + x5 + x6 + x7",
     family  = "binomial"
   ),
-  fun = "glm"
-  .after  = strurmerTruncate,
-  .afterSettings
+  fun = "glm",
+  .after  = calculateWeights,
+  .afterSettings = list(type = "none")
 )
 
 simulationSettings <- list(
@@ -122,10 +123,10 @@ simulationSettings <- list(
 )
 
 analysisSettings <- SimulationEvaluationHte::createAnalysisSettings(
-  threads        = 46,
+  threads        = 6,
   seed           = 19910930,
-  replications   = 5,
-  validationSize = 5e5,
+  replications   = 100,
+  validationSize = 1e5,
   analysisId     = paste(
     "scenario",
     idSettings$scenario,
@@ -140,15 +141,28 @@ smoothSettings <- list(
     label = "constant_treatment_effect",
     settings = createModelBasedSettings(
       type  = "treatment",
-      model = "logistic"
+      model = "logistic",
+      weightColumn = "weight"
     )
   ),
   constantLp = createHteSettings(
     label = "linear_predictor",
-    settings = createModelBasedSettings()
+    settings = createModelBasedSettings(
+      weightColumn = "weight"
+    )
   ),
   rcs3 = createHteSettings(
-    settings = SmoothHte::createRcsSettings(),
+    settings = SmoothHte::createRcsSettings(
+      weightColumn = "weight"
+    ),
     label = "rcs_3_knots"
   )
+)
+
+res <- runAnalysis(
+  analysisSettings        = analysisSettings,
+  simulationSettings      = simulationSettings,
+  predictionSettings      = predictionSettings,
+  smoothSettings          = smoothSettings,
+  propensityScoreSettings = propensityScoreSettings
 )
